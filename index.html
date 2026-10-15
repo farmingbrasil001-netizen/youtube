@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Video Sender para PC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col justify-between">
+
+    <header class="w-full bg-slate-900 border-b border-slate-800 p-4 shadow-lg">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
+                🚀 P2P Video Drop (>2GB)
+            </h1>
+            <span id="connectionStatus" class="px-3 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                Aguardando Conexão
+            </span>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col gap-6 overflow-y-auto">
+        
+        <!-- Instruções de Uso -->
+        <div class="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl shadow-md">
+            <h2 class="font-semibold text-blue-400 mb-2">Como usar para enviar vídeos do Celular pro PC:</h2>
+            <ol class="list-decimal list-inside text-sm text-slate-300 space-y-1">
+                <li>Abra este mesmo arquivo no navegador do seu <b>Computador</b> e clique em <b>"Criar Sessão (Receptor)"</b>.</li>
+                <li>Copie o código gerado ou abra pelo link e escaneie/cole no <b>Celular</b> no modo <b>"Conectar (Remetente)"</b>.</li>
+                <li>Selecione seu vídeo gigante de mais de 2GB no celular e clique em Enviar! A transferência rolará direto via WebRTC.</li>
+            </ol>
+        </div>
+
+        <!-- Seletor de Modo -->
+        <div id="modeSelector" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button onclick="initHost()" class="p-6 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold shadow-lg transition flex flex-col items-center justify-center gap-2 text-white">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span>Modo Computador (Receptor)</span>
+                <span class="text-xs font-normal text-blue-200">Gera o link para o celular se conectar</span>
+            </button>
+            <button onclick="initClient()" class="p-6 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-semibold shadow-lg transition flex flex-col items-center justify-center gap-2 text-white">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <span>Modo Celular (Remetente)</span>
+                <span class="text-xs font-normal text-indigo-200">Conecta e envia o arquivo de vídeo</span>
+            </button>
+        </div>
+
+        <!-- Área de Sinalização (Troca de Sinais SDP manuais ou automáticos) -->
+        <div id="signalingArea" class="hidden flex flex-col gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+            <h3 id="roleTitle" class="font-bold text-lg text-slate-200">Painel de Conexão P2P</h3>
+            
+            <div class="flex flex-col gap-2">
+                <label class="text-xs text-slate-400">1. Copie este código e leve para a outra ponta:</label>
+                <div class="flex gap-2">
+                    <textarea id="localSignal" readonly class="w-full h-24 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 font-mono resize-none focus:outline-none"></textarea>
+                    <button onclick="copySignal()" class="bg-slate-800 hover:bg-slate-700 px-4 rounded-xl text-xs font-medium transition">Copiar</button>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label class="text-xs text-slate-400">2. Cole o código gerado na outra ponta aqui:</label>
+                <div class="flex gap-2">
+                    <textarea id="remoteSignal" placeholder="Cole o código SDP da outra ponta aqui..." class="w-full h-24 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 font-mono resize-none focus:outline-none"></textarea>
+                    <button onclick="connectSignal()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-xl text-xs font-medium text-white transition">Conectar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de Envio de Vídeo (Celular) -->
+        <div id="senderPanel" class="hidden flex flex-col gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+            <h3 class="font-bold text-lg text-slate-200">Enviar Arquivo de Vídeo Gigante</h3>
+            <input type="file" id="videoFile" accept="video/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"/>
+            <button id="sendBtn" onclick="sendFile()" disabled class="w-full py-3 bg-slate-800 text-slate-500 rounded-xl font-semibold transition cursor-not-allowed">
+                Selecione um vídeo para enviar
+            </button>
+            <div id="uploadProgressContainer" class="hidden flex flex-col gap-2">
+                <div class="flex justify-between text-xs text-slate-400">
+                    <span id="progressText">Enviando: 0%</span>
+                    <span id="speedText">0 MB/s</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                    <div id="progressBar" class="bg-blue-500 h-2.5 w-0 transition-all duration-150"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de Recepção de Vídeo (Computador) -->
+        <div id="receiverPanel" class="hidden flex flex-col gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+            <h3 class="font-bold text-lg text-slate-200">Recepção do Vídeo no Computador</h3>
+            <div id="downloadContainer" class="hidden flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-700 rounded-xl gap-4">
+                <svg class="w-12 h-12 text-emerald-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                <div class="text-center">
+                    <p id="incomingFileName" class="font-semibold text-slate-200">arquivo.mp4</p>
+                    <p id="incomingFileSize" class="text-xs text-slate-400">0 MB</p>
+                </div>
+                <a id="downloadLink" class="hidden px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-white transition shadow-lg">
+                    Baixar Vídeo Concluído para o PC
+                </a>
+            </div>
+            <div id="downloadProgressContainer" class="flex flex-col gap-2">
+                <div class="flex justify-between text-xs text-slate-400">
+                    <span id="downloadProgressText">Recebendo: 0%</span>
+                    <span id="downloadSpeedText">Aguardando dados...</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                    <div id="downloadProgressBar" class="bg-emerald-500 h-2.5 w-0 transition-all duration-150"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let peer;
+        let isInitiator = false;
+        let incomingFileMeta = null;
+        let receivedBuffers = [];
+        let receivedSize = 0;
+        const CHUNK_SIZE = 64 * 1024; // 64KB chunks para máxima estabilidade em arquivos gigantes
+
+        function updateStatus(text, colorClass) {
+            const badge = document.getElementById('connectionStatus');
+            badge.innerText = text;
+            badge.className = `px-3 py-1 text-xs rounded-full border ${colorClass}`;
+        }
+
+        function initHost() {
+            isInitiator = true;
+            document.getElementById('modeSelector').classList.add('hidden');
+            document.getElementById('signalingArea').classList.remove('hidden');
+            document.getElementById('receiverPanel').classList.remove('hidden');
+            document.getElementById('roleTitle').innerText = "Modo Computador (Crie o convite)";
+
+            peer = new SimplePeer({ initiator: true, trickle: false });
+            setupPeerEvents();
+        }
+
+        function initClient() {
+            isInitiator = false;
+            document.getElementById('modeSelector').classList.add('hidden');
+            document.getElementById('signalingArea').classList.remove('hidden');
+            document.getElementById('senderPanel').classList.remove('hidden');
+            document.getElementById('roleTitle').innerText = "Modo Celular (Conecte ao PC)";
+
+            peer = new SimplePeer({ initiator: false, trickle: false });
+            setupPeerEvents();
+        }
+
+        function setupPeerEvents() {
+            peer.on('signal', data => {
+                document.getElementById('localSignal').value = JSON.stringify(data);
+            });
+
+            peer.on('connect', () => {
+                updateStatus('Conectado P2P com Sucesso!', 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30');
+                if (!isInitiator) {
+                    document.getElementById('sendBtn').disabled = false;
+                    document.getElementById('sendBtn').classList.remove('bg-slate-800', 'text-slate-500', 'cursor-not-allowed');
+                    document.getElementById('sendBtn').classList.add('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'cursor-pointer');
+                    document.getElementById('sendBtn').innerText = "Enviar Vídeo";
+                }
+            });
+
+            peer.on('data', data => {
+                handleIncomingData(data);
+            });
+
+            peer.on('error', err => {
+                console.error('Erro WebRTC:', err);
+                updateStatus('Erro na Conexão', 'bg-rose-500/20 text-rose-400 border-rose-500/30');
+            });
+
+            peer.on('close', () => {
+                updateStatus('Conexão Encerrada', 'bg-rose-500/20 text-rose-400 border-rose-500/30');
+            });
+        }
+
+        function connectSignal() {
+            try {
+                const val = document.getElementById('remoteSignal').value;
+                const signalData = JSON.parse(val);
+                peer.signal(signalData);
+                updateStatus('Estabelecendo conexão...', 'bg-blue-500/20 text-blue-400 border-blue-500/30');
+            } catch(e) {
+                alert('Código de sinalização inválido. Certifique-se de colar o JSON correto.');
+            }
+        }
+
+        function copySignal() {
+            const textarea = document.getElementById('localSignal');
+            textarea.select();
+            document.execCommand('copy');
+            alert('Código copiado com sucesso! Leve para o outro dispositivo.');
+        }
+
+        // Lógica de Envio de Arquivos Grandes em Pedaços (Chunking)
+        function sendFile() {
+            const fileInput = document.getElementById('videoFile');
+            if (fileInput.files.length === 0) return;
+            const file = fileInput.files[0];
+
+            document.getElementById('uploadProgressContainer').classList.remove('hidden');
+            
+            // 1. Enviar metadados primeiro (Nome e Tamanho)
+            const meta = JSON.stringify({ type: 'META', name: file.name, size: file.size });
+            peer.send(meta);
+
+            const reader = new FileReader();
+            let offset = 0;
+            const startTime = Date.now();
+
+            reader.onload = function(e) {
+                peer.send(e.target.result);
+                offset += e.target.result.byteLength;
+                
+                const progress = Math.round((offset / file.size) * 100);
+                document.getElementById('progressBar').style.width = progress + '%';
+                document.getElementById('progressText').innerText = `Enviando: ${progress}%`;
+                
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = (offset / (1024 * 1024)) / (elapsed || 1);
+                document.getElementById('speedText').innerText = `${speed.toFixed(2)} MB/s`;
+
+                if (offset < file.size) {
+                    readNextChunk();
+                } else {
+                    document.getElementById('progressText').innerText = 'Envio concluído com sucesso!';
+                }
+            };
+
+            function readNextChunk() {
+                const slice = file.slice(offset, offset + CHUNK_SIZE);
+                reader.readAsArrayBuffer(slice);
+            }
+
+            readNextChunk();
+        }
+
+        // Lógica de Recepção no Computador
+        function handleIncomingData(data) {
+            if (typeof data === 'string') {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.type === 'META') {
+                        incomingFileMeta = parsed;
+                        receivedBuffers = [];
+                        receivedSize = 0;
+                        document.getElementById('incomingFileName').innerText = parsed.name;
+                        document.getElementById('incomingFileSize').innerText = (parsed.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                        return;
+                    }
+                } catch(e) {}
+            }
+
+            // Recebimento de ArrayBuffer binário
+            receivedBuffers.push(data);
+            receivedSize += data.byteLength;
+
+            if (incomingFileMeta) {
+                const progress = Math.round((receivedSize / incomingFileMeta.size) * 100);
+                document.getElementById('downloadProgressBar').style.width = progress + '%';
+                document.getElementById('downloadProgressText').innerText = `Recebendo: ${progress}%`;
+                document.getElementById('downloadSpeedText').innerText = `${(receivedSize / (1024 * 1024)).toFixed(1)} MB recebidos`;
+
+                if (receivedSize >= incomingFileMeta.size) {
+                    const blob = new Blob(receivedBuffers);
+                    const url = URL.createObjectURL(blob);
+                    
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadLink.href = url;
+                    downloadLink.download = incomingFileMeta.name;
+                    downloadLink.classList.remove('hidden');
+                    
+                    document.getElementById('downloadContainer').classList.remove('hidden');
+                    document.getElementById('downloadProgressContainer').classList.add('hidden');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
