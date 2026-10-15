@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Video Sender para PC</title>
+    <title>P2P Vídeo Drop via QR Code (>2GB)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+    <!-- Biblioteca para gerar QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <!-- Biblioteca para ler QR Code via câmera do celular -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-full flex flex-col justify-between">
@@ -17,67 +20,70 @@
     <header class="w-full bg-slate-900 border-b border-slate-800 p-4 shadow-lg">
         <div class="max-w-4xl mx-auto flex justify-between items-center">
             <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-                🚀 P2P Video Drop (>2GB)
+                🚀 P2P Video Drop (QR Code)
             </h1>
             <span id="connectionStatus" class="px-3 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                Aguardando Conexão
+                Aguardando Escolha
             </span>
         </div>
     </header>
 
     <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col gap-6 overflow-y-auto">
         
-        <!-- Instruções de Uso -->
         <div class="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl shadow-md">
-            <h2 class="font-semibold text-blue-400 mb-2">Como usar para enviar vídeos do Celular pro PC:</h2>
+            <h2 class="font-semibold text-blue-400 mb-2">Como usar (Acima de 2GB para o YouTube):</h2>
             <ol class="list-decimal list-inside text-sm text-slate-300 space-y-1">
-                <li>Abra este mesmo arquivo no navegador do seu <b>Computador</b> e clique em <b>"Criar Sessão (Receptor)"</b>.</li>
-                <li>Copie o código gerado ou abra pelo link e escaneie/cole no <b>Celular</b> no modo <b>"Conectar (Remetente)"</b>.</li>
-                <li>Selecione seu vídeo gigante de mais de 2GB no celular e clique em Enviar! A transferência rolará direto via WebRTC.</li>
+                <li>No <b>Computador</b>, clique em <b>"Modo Computador (Receptor)"</b> para gerar o QR Code.</li>
+                <li>No <b>Celular</b>, clique em <b>"Modo Celular (Remetente)"</b> e aponte a câmera para o QR Code do computador.</li>
+                <li>Selecione o seu vídeo gigante e faça o envio direto pelo WebRTC sem limites de tamanho!</li>
             </ol>
         </div>
 
-        <!-- Seletor de Modo -->
         <div id="modeSelector" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button onclick="initHost()" class="p-6 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold shadow-lg transition flex flex-col items-center justify-center gap-2 text-white">
+            <button onclick="initHost()" class="p-6 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold shadow-lg transition flex flex-col items-center justify-center gap-2 text-white cursor-pointer">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 <span>Modo Computador (Receptor)</span>
-                <span class="text-xs font-normal text-blue-200">Gera o link para o celular se conectar</span>
+                <span class="text-xs font-normal text-blue-200">Gera QR Code para escanear</span>
             </button>
-            <button onclick="initClient()" class="p-6 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-semibold shadow-lg transition flex flex-col items-center justify-center gap-2 text-white">
+            <button onclick="initClient()" class="p-6 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-semibold shadow-lg transition flex flex-col items-center justify-center gap-2 text-white cursor-pointer">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                 <span>Modo Celular (Remetente)</span>
-                <span class="text-xs font-normal text-indigo-200">Conecta e envia o arquivo de vídeo</span>
+                <span class="text-xs font-normal text-indigo-200">Abre a câmera para ler o QR Code</span>
             </button>
         </div>
 
-        <!-- Área de Sinalização (Troca de Sinais SDP manuais ou automáticos) -->
-        <div id="signalingArea" class="hidden flex flex-col gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-            <h3 id="roleTitle" class="font-bold text-lg text-slate-200">Painel de Conexão P2P</h3>
+        <!-- Painel do Computador (Exibir QR Code e Resposta) -->
+        <div id="hostPanel" class="hidden flex flex-col items-center gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+            <h3 class="font-bold text-lg text-slate-200">1. Aponte a câmera do celular para este QR Code:</h3>
+            <div id="qrcode" class="p-4 bg-white rounded-xl shadow-inner flex items-center justify-center"></div>
+            <p class="text-xs text-slate-400 text-center">Assim que o celular ler este código, ele gerará uma resposta. Cole a resposta abaixo caso necessário ou aguarde a conexão automática.</p>
             
-            <div class="flex flex-col gap-2">
-                <label class="text-xs text-slate-400">1. Copie este código e leve para a outra ponta:</label>
+            <div id="hostAnswerArea" class="w-full flex flex-col gap-2 mt-2">
+                <label class="text-xs text-slate-400">Se o celular gerou um código de resposta, cole aqui:</label>
                 <div class="flex gap-2">
-                    <textarea id="localSignal" readonly class="w-full h-24 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 font-mono resize-none focus:outline-none"></textarea>
-                    <button onclick="copySignal()" class="bg-slate-800 hover:bg-slate-700 px-4 rounded-xl text-xs font-medium transition">Copiar</button>
+                    <input type="text" id="hostAnswerInput" placeholder="Cole o código de resposta do celular..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono"/>
+                    <button onclick="acceptHostAnswer()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-xl text-xs font-medium text-white transition">Conectar</button>
                 </div>
             </div>
+        </div>
 
-            <div class="flex flex-col gap-2">
-                <label class="text-xs text-slate-400">2. Cole o código gerado na outra ponta aqui:</label>
-                <div class="flex gap-2">
-                    <textarea id="remoteSignal" placeholder="Cole o código SDP da outra ponta aqui..." class="w-full h-24 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 font-mono resize-none focus:outline-none"></textarea>
-                    <button onclick="connectSignal()" class="bg-emerald-600 hover:bg-emerald-500 px-4 rounded-xl text-xs font-medium text-white transition">Conectar</button>
-                </div>
+        <!-- Painel do Celular (Leitor de Câmera QR e QR de Resposta) -->
+        <div id="clientPanel" class="hidden flex flex-col gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+            <h3 class="font-bold text-lg text-slate-200">Leitor de QR Code do Computador</h3>
+            <div id="reader" class="w-full overflow-hidden rounded-xl bg-slate-950 border border-slate-800 min-h-[250px]"></div>
+            
+            <div id="clientResultBox" class="hidden flex flex-col gap-3">
+                <p class="text-xs text-emerald-400 font-semibold">QR Code lido com sucesso! Mostre este QR de resposta para o PC (ou copie se preferir):</p>
+                <div id="clientQrcode" class="p-4 bg-white rounded-xl shadow-inner flex items-center justify-center self-center"></div>
             </div>
         </div>
 
         <!-- Painel de Envio de Vídeo (Celular) -->
         <div id="senderPanel" class="hidden flex flex-col gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-            <h3 class="font-bold text-lg text-slate-200">Enviar Arquivo de Vídeo Gigante</h3>
+            <h3 class="font-bold text-lg text-slate-200">Enviar Arquivo de Vídeo Gigante (>2GB)</h3>
             <input type="file" id="videoFile" accept="video/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"/>
             <button id="sendBtn" onclick="sendFile()" disabled class="w-full py-3 bg-slate-800 text-slate-500 rounded-xl font-semibold transition cursor-not-allowed">
-                Selecione um vídeo para enviar
+                Aguardando Conexão P2P...
             </button>
             <div id="uploadProgressContainer" class="hidden flex flex-col gap-2">
                 <div class="flex justify-between text-xs text-slate-400">
@@ -97,10 +103,10 @@
                 <svg class="w-12 h-12 text-emerald-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                 <div class="text-center">
                     <p id="incomingFileName" class="font-semibold text-slate-200">arquivo.mp4</p>
-                    <p id="incomingFileSize" class="text-xs text-slate-400">0 MB</p>
+                    <p id="incomingFileSize" class="text-xs text-slate-400">0 GB</p>
                 </div>
-                <a id="downloadLink" class="hidden px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-white transition shadow-lg">
-                    Baixar Vídeo Concluído para o PC
+                <a id="downloadLink" class="hidden px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-white transition shadow-lg cursor-pointer">
+                    Baixar Vídeo Concluído (Pronto para o YouTube!)
                 </a>
             </div>
             <div id="downloadProgressContainer" class="flex flex-col gap-2">
@@ -122,7 +128,7 @@
         let incomingFileMeta = null;
         let receivedBuffers = [];
         let receivedSize = 0;
-        const CHUNK_SIZE = 64 * 1024; // 64KB chunks para máxima estabilidade em arquivos gigantes
+        const CHUNK_SIZE = 64 * 1024; // 64KB por pedaço para máxima estabilidade
 
         function updateStatus(text, colorClass) {
             const badge = document.getElementById('connectionStatus');
@@ -130,12 +136,27 @@
             badge.className = `px-3 py-1 text-xs rounded-full border ${colorClass}`;
         }
 
+        function generateQRCode(text, elementId) {
+            document.getElementById(elementId).innerHTML = "";
+            try {
+                // Tipo 0 para auto-detecção de tamanho
+                const typeNumber = 0;
+                const errorCorrectionLevel = 'L';
+                const qr = qrcode(typeNumber, errorCorrectionLevel);
+                qr.addData(text);
+                qr.make();
+                document.getElementById(elementId).innerHTML = qr.createImgTag(4, 8);
+            } catch(e) {
+                // Se a string for muito grande para um único QR, criar com compressão ou fallback
+                document.getElementById(elementId).innerHTML = `<span class="text-xs text-rose-500">Dados muito grandes para QR. Use cópia rápida se necessário.</span>`;
+            }
+        }
+
         function initHost() {
             isInitiator = true;
             document.getElementById('modeSelector').classList.add('hidden');
-            document.getElementById('signalingArea').classList.remove('hidden');
+            document.getElementById('hostPanel').classList.remove('hidden');
             document.getElementById('receiverPanel').classList.remove('hidden');
-            document.getElementById('roleTitle').innerText = "Modo Computador (Crie o convite)";
 
             peer = new SimplePeer({ initiator: true, trickle: false });
             setupPeerEvents();
@@ -144,17 +165,42 @@
         function initClient() {
             isInitiator = false;
             document.getElementById('modeSelector').classList.add('hidden');
-            document.getElementById('signalingArea').classList.remove('hidden');
+            document.getElementById('clientPanel').classList.remove('hidden');
             document.getElementById('senderPanel').classList.remove('hidden');
-            document.getElementById('roleTitle').innerText = "Modo Celular (Conecte ao PC)";
 
             peer = new SimplePeer({ initiator: false, trickle: false });
             setupPeerEvents();
+
+            // Iniciar leitor de QR Code na câmera do celular
+            const html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                qrCodeMessage => {
+                    try {
+                        const parsedSignal = JSON.parse(qrCodeMessage);
+                        peer.signal(parsedSignal);
+                        html5QrCode.stop().catch(() => {});
+                        updateStatus('QR Code lido! Conectando...', 'bg-blue-500/20 text-blue-400 border-blue-500/30');
+                    } catch(e) {
+                        console.error("Erro ao processar QR Code lido", e);
+                    }
+                },
+                errorMessage => {}
+            ).catch(err => {
+                alert("Erro ao abrir a câmera. Verifique as permissões do navegador no celular.");
+            });
         }
 
         function setupPeerEvents() {
             peer.on('signal', data => {
-                document.getElementById('localSignal').value = JSON.stringify(data);
+                const jsonStr = JSON.stringify(data);
+                if (isInitiator) {
+                    generateQRCode(jsonStr, 'qrcode');
+                } else {
+                    document.getElementById('clientResultBox').classList.remove('hidden');
+                    generateQRCode(jsonStr, 'clientQrcode');
+                }
             });
 
             peer.on('connect', () => {
@@ -163,7 +209,7 @@
                     document.getElementById('sendBtn').disabled = false;
                     document.getElementById('sendBtn').classList.remove('bg-slate-800', 'text-slate-500', 'cursor-not-allowed');
                     document.getElementById('sendBtn').classList.add('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'cursor-pointer');
-                    document.getElementById('sendBtn').innerText = "Enviar Vídeo";
+                    document.getElementById('sendBtn').innerText = "Enviar Vídeo Gigante";
                 }
             });
 
@@ -181,25 +227,16 @@
             });
         }
 
-        function connectSignal() {
+        function acceptHostAnswer() {
             try {
-                const val = document.getElementById('remoteSignal').value;
-                const signalData = JSON.parse(val);
-                peer.signal(signalData);
+                const val = document.getElementById('hostAnswerInput').value;
+                peer.signal(JSON.parse(val));
                 updateStatus('Estabelecendo conexão...', 'bg-blue-500/20 text-blue-400 border-blue-500/30');
             } catch(e) {
-                alert('Código de sinalização inválido. Certifique-se de colar o JSON correto.');
+                alert('Código de resposta inválido.');
             }
         }
 
-        function copySignal() {
-            const textarea = document.getElementById('localSignal');
-            textarea.select();
-            document.execCommand('copy');
-            alert('Código copiado com sucesso! Leve para o outro dispositivo.');
-        }
-
-        // Lógica de Envio de Arquivos Grandes em Pedaços (Chunking)
         function sendFile() {
             const fileInput = document.getElementById('videoFile');
             if (fileInput.files.length === 0) return;
@@ -207,7 +244,7 @@
 
             document.getElementById('uploadProgressContainer').classList.remove('hidden');
             
-            // 1. Enviar metadados primeiro (Nome e Tamanho)
+            // Enviar metadados do arquivo primeiro
             const meta = JSON.stringify({ type: 'META', name: file.name, size: file.size });
             peer.send(meta);
 
@@ -242,7 +279,6 @@
             readNextChunk();
         }
 
-        // Lógica de Recepção no Computador
         function handleIncomingData(data) {
             if (typeof data === 'string') {
                 try {
@@ -258,7 +294,6 @@
                 } catch(e) {}
             }
 
-            // Recebimento de ArrayBuffer binário
             receivedBuffers.push(data);
             receivedSize += data.byteLength;
 
